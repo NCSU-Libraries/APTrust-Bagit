@@ -13,7 +13,7 @@ import argparse
 accepted_access_levels = ['consortia', 'restricted', 'institution']
 CONFIG_FILE = 'config.yml'
 
-logging.basicConfig(filename='logs/error.log', level=logging.WARNING)
+logging.basicConfig(filename='logs/error.log', level=logging.INFO , format='%(asctime)s - %(levelname)s:  %(message)s')
 
 # Load config
 stream = file(CONFIG_FILE, 'r')
@@ -45,7 +45,6 @@ def push_to_aptrust(tarred_bag, bag_name, env='test', verbose=False):
     else:
         s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name)
 
-    #TODO: figure out how to catch error --- more here: https://boto3.readthedocs.org/en/latest/reference/customizations/s3.html#ref-s3transfer-usage
     return True
 
 
@@ -94,7 +93,7 @@ def generate_bag_name(directory_name, multipart_num=None, total_num=None):
 
 def verify_s3_upload(bag_name, env):
     s3 = boto3.resource('s3')
-    bucket = s3.bucket(config[env]['receiving_bucket'])
+    bucket = s3.Bucket(config[env]['receiving_bucket'])
 
     if any(obj.key == bag_name for obj in bucket.objects.all()):
         return True
@@ -121,7 +120,7 @@ if __name__ == '__main__':
         sys.exit(1)
 
     bag_dir = args.directory
-    bag_name = args.bag or bag_dir.split('/')[-1]
+    bag_name = args.bag or bag_dir.rstrip('/').split('/')[-1]
 
     # choose environment
     if args.test:
@@ -144,10 +143,10 @@ if __name__ == '__main__':
         push_to_aptrust(tarred_bag, bag_name, env, args.verbose)
 
         if verify_s3_upload(bag_name, env):
-            logging.debug('Successfully uploaded bag to S3')
+            logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
 
     except Exception as e:
-        logging.error("There was an error:", e)
+        logging.exception("There was an error:")
         sys.exit(1)
 
     sys.exit(0)
