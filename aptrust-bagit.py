@@ -66,7 +66,8 @@ class ProgressPercentage(object):
 def tar_bag(bag_path, tar_path=None):
     if not tar_path:
         tar_path = os.path.normpath(bag_path) + '.tar'
-    return_val = os.system('tar cf {0} {1}'.format(tar_path, bag_path))
+    bag_dir = bag_path.rstrip('/').split('/')[-1]
+    return_val = os.system('tar cf {0} --directory={1} {2}'.format(tar_path, config['bags_base_dir'], bag_dir))
     return bag_path + '.tar' if return_val == 0 else False
 
 
@@ -108,11 +109,16 @@ if __name__ == '__main__':
 
     parser.add_argument('directory', help='The directory to bag/ingest')
     parser.add_argument('-b', '--bag', help='Name to give the bag (default is the directory name)')
+    parser.add_argument('-a', '--access', help='APTrust access level for bag (can be either: consortia, institution, or restricted)')
     parser.add_argument('-t', '--test', help='Ingest to test instance', action='store_true')
     parser.add_argument('-v', '--verbose', help='Provide more output', action='store_true')
-    # TODO: argument for access level
 
     args = parser.parse_args()
+
+    access = args.access or 'consortia'
+    if access not in accepted_access_levels:
+        logging.error('Invalid access level %s' % access)
+        sys.exit(1)
 
     # validate directory
     if not os.path.isdir(args.directory):
@@ -136,11 +142,13 @@ if __name__ == '__main__':
         shutil.copytree(bag_dir, new_path)
         logging.debug('Making bag')
         the_bag = bagit.make_bag(new_path)
-        generate_aptrust_info(the_bag.path, bag_name)
+        generate_aptrust_info(the_bag.path, bag_name, access)
         logging.debug('Tarring bag')
         tarred_bag = tar_bag(new_path)
         logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
-        push_to_aptrust(tarred_bag, bag_name, env, args.verbose)
+
+	tar_base_name = os.path.split(tarred_bag)[1]
+        push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
 
         if verify_s3_upload(bag_name, env):
             logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
