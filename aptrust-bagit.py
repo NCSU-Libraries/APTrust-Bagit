@@ -9,6 +9,7 @@ import boto3
 import logging
 import threading
 import argparse
+import datetime
 
 accepted_access_levels = ['consortia', 'restricted', 'institution']
 CONFIG_FILE = 'config.yml'
@@ -19,8 +20,6 @@ logging.basicConfig(filename='logs/error.log', level=logging.INFO , format='%(as
 stream = file(CONFIG_FILE, 'r')
 config = yaml.load(stream)
 stream.close()
-
-#TODO: Flesh out exceptions throughout script
 
 """ Generate an aptrust-info.txt file required by APTrust """
 def generate_aptrust_info(bag_path, title, access='consortia'):
@@ -92,6 +91,7 @@ def generate_bag_name(directory_name, multipart_num=None, total_num=None):
 
     return bag_name
 
+""" Check S3 to see if the bag exists in the receiving bucket """
 def verify_s3_upload(bag_name, env):
     s3 = boto3.resource('s3')
     bucket = s3.Bucket(config[env]['receiving_bucket'])
@@ -152,6 +152,9 @@ if __name__ == '__main__':
 
         if verify_s3_upload(bag_name, env):
             logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
+            # write to audit file (tab delimited)
+            with open(config['audit_file'], 'w') as audit:
+              audit.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(datetime.datetime.now(), bag_name, tarred_bag, bag_dir, access, env))
 
     except Exception as e:
         logging.exception("There was an error:")

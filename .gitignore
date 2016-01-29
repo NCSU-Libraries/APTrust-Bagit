@@ -1,4 +1,5 @@
 config.yml
+audit.txt
 bags/*
 venv
 logs/*
