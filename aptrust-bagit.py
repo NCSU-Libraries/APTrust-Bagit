@@ -10,6 +10,7 @@ import logging
 import threading
 import argparse
 import datetime
+import time
 
 accepted_access_levels = ['consortia', 'restricted', 'institution']
 CONFIG_FILE = 'config.yml'
@@ -94,12 +95,17 @@ def generate_bag_name(directory_name, multipart_num=None, total_num=None):
 """ Check S3 to see if the bag exists in the receiving bucket """
 def verify_s3_upload(bag_name, env):
     s3 = boto3.resource('s3')
-    bucket = s3.Bucket(config[env]['receiving_bucket'])
 
-    if any(obj.key == bag_name for obj in bucket.objects.all()):
-        return True
-    else:
-        raise Exception #not uploaded
+    # check a few times to make sure the data has time to appear in S3
+    for _ in range(5):
+        bucket = s3.Bucket(config[env]['receiving_bucket'])
+        if any(obj.key == bag_name for obj in bucket.objects.all()):
+            return True
+        else:
+            time.sleep(2)
+            continue
+
+    raise Exception #not uploaded
 
 
 if __name__ == '__main__':
@@ -150,7 +156,7 @@ if __name__ == '__main__':
 	tar_base_name = os.path.split(tarred_bag)[1]
         push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
 
-        if verify_s3_upload(bag_name, env):
+        if verify_s3_upload(tar_base_name, env):
             logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
             # write to audit file (tab delimited)
             with open(config['audit_file'], 'w') as audit:
