@@ -17,6 +17,11 @@ Copy config.yml.example to config.yml, and fill in with your own values
 - institution: your APTrust institution code (example: ncsu)
 - receiving_bucket: the address of the S3 receiving bucket - you can set both test and production versions
 
+The Python S3 client (boto3) also expects that a file with the bucket keys reside in ~/.aws/credentials in the form:
+
+    [default]
+    aws_access_key_id = access_key_here 
+    aws_secret_access_key = secret_access_key_here
 
 ### Installation
 
