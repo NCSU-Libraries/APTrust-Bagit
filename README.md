@@ -57,6 +57,11 @@ Here is information about the various arguments you can provide to the script:
 	  -v, --verbose         Provide more output
 
 
+#### Run with nohup
+
+Since larger bags may take a while to transmit, it is recommended to use nohup to run this script so you can disconnect from your SSH session (if running manually).
+See send_dir_to_aptrust.py for an example of how to do this, or run that script instead of aptrust-bagit.py (it defaults to submitting to the test instance of APTrust right now)
+
 ## What information is recorded
 
 For each bag, as part of the bagging process, the following information is kept:
