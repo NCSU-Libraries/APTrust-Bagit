@@ -15,12 +15,14 @@ import time
 accepted_access_levels = ['consortia', 'restricted', 'institution']
 CONFIG_FILE = 'config.yml'
 
-logging.basicConfig(filename='logs/error.log', level=logging.INFO , format='%(asctime)s - %(levelname)s:  %(message)s')
 
 # Load config
 stream = file(CONFIG_FILE, 'r')
 config = yaml.load(stream)
 stream.close()
+
+
+logging.basicConfig(filename=config['log_file'], level=logging.INFO , format='%(asctime)s - %(levelname)s:  %(message)s')
 
 """ Generate an aptrust-info.txt file required by APTrust """
 def generate_aptrust_info(bag_path, title, access='consortia'):

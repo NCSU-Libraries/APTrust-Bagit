@@ -1,5 +1,7 @@
 # Bags staging area - this is where bags will be created for the purpose of ingesting
 bags_base_dir: '/path/to/bags'
+audit_file: '/path/to/audit.txt'
+log_file: '/path/to/error.log'
 
 # Institution code
 institution: 'somewhere'
