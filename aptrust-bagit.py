@@ -117,13 +117,13 @@ if __name__ == '__main__':
 
     parser.add_argument('directory', help='The directory to bag/ingest')
     parser.add_argument('-b', '--bag', help='Name to give the bag (default is the directory name)')
-    parser.add_argument('-a', '--access', help='APTrust access level for bag (can be either: consortia, institution, or restricted)')
-    parser.add_argument('-t', '--test', help='Ingest to test instance', action='store_true')
+    parser.add_argument('-a', '--access', help='APTrust access level for bag (can be either: consortia, institution, or restricted - default is institution)')
+    parser.add_argument('-p', '--production', help='Ingest to production instance', action='store_true')
     parser.add_argument('-v', '--verbose', help='Provide more output', action='store_true')
 
     args = parser.parse_args()
 
-    access = args.access or 'consortia'
+    access = args.access or 'institution'
     if access not in accepted_access_levels:
         logging.error('Invalid access level %s' % access)
         sys.exit(1)
@@ -137,10 +137,10 @@ if __name__ == '__main__':
     bag_name = args.bag or bag_dir.rstrip('/').split('/')[-1]
 
     # choose environment
-    if args.test:
-        env = 'test'
-    else:
+    if args.production:
         env = 'production'
+    else:
+        env = 'test'
 
     # kick off bagging/ingest
     try:

@@ -40,7 +40,7 @@ version of python:
 
 Here is information about the various arguments you can provide to the script:
 
-	usage: aptrust-bagit.py [-h] [-b BAG] [-a ACCESS] [-t] [-v] directory
+	usage: aptrust-bagit.py [-h] [-b BAG] [-a ACCESS] [-p] [-v] directory
 
 	Bag a directory and send it to an APTrust S3 receiving bucket
 
@@ -52,8 +52,9 @@ Here is information about the various arguments you can provide to the script:
 	  -b BAG, --bag BAG     Name to give the bag (default is the directory name)
 	  -a ACCESS, --access ACCESS
 				APTrust access level for bag (can be either:
-				consortia, institution, or restricted)
-	  -t, --test            Ingest to test instance
+				consortia, institution, or restricted - default is
+				institution)
+	  -p, --production      Ingest to production instance
 	  -v, --verbose         Provide more output
 
 
