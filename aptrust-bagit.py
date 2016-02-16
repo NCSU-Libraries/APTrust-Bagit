@@ -161,7 +161,7 @@ if __name__ == '__main__':
         if verify_s3_upload(tar_base_name, env):
             logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
             # write to audit file (tab delimited)
-            with open(config['audit_file'], 'w') as audit:
+            with open(config['audit_file'], 'a') as audit:
               audit.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(datetime.datetime.now(), bag_name, tarred_bag, bag_dir, access, env))
 
     except Exception as e:
