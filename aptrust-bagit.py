@@ -6,11 +6,13 @@ import shutil
 import sys
 import yaml
 import boto3
+import requests
 import logging
 import threading
 import argparse
 import datetime
 import time
+import json
 
 accepted_access_levels = ['consortia', 'restricted', 'institution']
 CONFIG_FILE = 'config.yml'
@@ -110,6 +112,86 @@ def verify_s3_upload(bag_name, env):
     raise Exception #not uploaded
 
 
+class DaevClient(object):
+    def __init__(self, base_url):
+        if requests.get(base_url).status_code != 200:
+            raise Exception # can't communicate to Daev server
+        self.base_url = base_url
+
+    def create_submission_package(self, service_code, submission_datetime, assets):
+        if not service_code:
+            raise Exception # no service code
+        if not submission_datetime:
+            raise Exception # no submission datetime
+
+        data = self._create_data_obj(service_code, submission_datetime)
+
+        for asset in assets:
+            a = self._create_asset_obj(asset)
+            data['data']['relationships']['assets']['data'].append(a)
+
+        headers = { 'Content-Type': 'application/vnd.api+json' }
+
+        #FIXME: construct this URL properly
+        r = requests.post(self.base_url + '/submission_packages', data=json.dumps(data), headers=headers)
+
+        if r.status_code != 201:
+            raise Exception # there was an issue TODO: better error
+
+        return True
+
+    def _create_data_obj(self, service_code, submission_datetime):
+        return {
+            'data': {
+                'type': 'submission_packages',
+                'attributes': {
+                    'service_code': service_code,
+                    'submission_datetime': submission_datetime,
+                },
+                'relationships': {
+                    'assets': {
+                        'data': []
+                    }
+                }
+            }
+        }
+
+    def _create_asset_obj(self, asset):
+        return {
+            'attributes': {
+                'filename': asset['filename'],
+                'size': asset['size'],
+                'location': asset['location'],
+                'file_creation_datetime': asset['file_creation_datetime']
+            },
+            'relationships': {
+                'checksums': {
+                    'data': {
+                        'checksum_type': 'md5',
+                        'value': asset['checksum']
+                    }
+                }
+            }
+        }
+
+
+def create_asset(bag_file_name, value, original_bag_dir):
+    if bag_file_name.startswith('data/'):
+        asset = {}
+        bag_file_path = bag_file_name[5:] # cut off the data/ part
+        original_file_path = os.path.join(original_bag_dir, bag_file_path)
+        asset['filename'] = bag_file_name.split('/')[-1]
+        asset['location'] = 'scrc-staff-prod01.lib.ncsu.edu:%s' % original_file_path #TODO: make more generic
+        # get the create date
+        asset['file_creation_datetime'] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(os.path.getctime(original_file_path)))
+        # get size of file
+        asset['size'] = os.path.getsize(original_file_path)
+        # get the filename/checksum
+        asset['checksum'] = value['md5']
+        return asset
+    else:
+        return False
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
@@ -133,7 +215,7 @@ if __name__ == '__main__':
         logging.error('The supplied directory does not exist')
         sys.exit(1)
 
-    bag_dir = args.directory
+    bag_dir = os.path.abspath(args.directory)
     bag_name = args.bag or bag_dir.rstrip('/').split('/')[-1]
 
     # choose environment
@@ -155,14 +237,22 @@ if __name__ == '__main__':
         tarred_bag = tar_bag(new_path)
         logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
 
-	tar_base_name = os.path.split(tarred_bag)[1]
-        push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
+        tar_base_name = os.path.split(tarred_bag)[1]
+        #push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
 
-        if verify_s3_upload(tar_base_name, env):
+        #if verify_s3_upload(tar_base_name, env):
+        if True:
+            upload_time = datetime.datetime.now().isoformat()
+            assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in the_bag.entries.iteritems()])
+            # upload to daev
+            daev_client = DaevClient(config[env]['daev_base_path'])
+            daev_client.create_submission_package('apt', upload_time, assets)
+
             logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
+
             # write to audit file (tab delimited)
             with open(config['audit_file'], 'a') as audit:
-              audit.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(datetime.datetime.now(), bag_name, tarred_bag, bag_dir, access, env))
+              audit.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(upload_time, bag_name, tarred_bag, bag_dir, access, env))
 
     except Exception as e:
         logging.exception("There was an error:")
