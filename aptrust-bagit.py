@@ -238,10 +238,9 @@ if __name__ == '__main__':
         logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
 
         tar_base_name = os.path.split(tarred_bag)[1]
-        #push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
+        push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
 
-        #if verify_s3_upload(tar_base_name, env):
-        if True:
+        if verify_s3_upload(tar_base_name, env):
             upload_time = datetime.datetime.now().isoformat()
             assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in the_bag.entries.iteritems()])
             # upload to daev
