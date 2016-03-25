@@ -41,7 +41,8 @@ def generate_aptrust_info(bag_path, title, access='consortia'):
 
 
 """ Push a bag to APTrust S3 bucket """
-def push_to_aptrust(tarred_bag, bag_name, env='test', verbose=False):
+def push_to_aptrust(tarred_bag, env='test', verbose=False):
+    tar_base_name = os.path.split(tarred_bag)[1]
     s3 = boto3.resource('s3')
 
     if verbose:
@@ -49,7 +50,7 @@ def push_to_aptrust(tarred_bag, bag_name, env='test', verbose=False):
     else:
         s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name)
 
-    return True
+    return tar_base_name
 
 
 class ProgressPercentage(object):
@@ -89,8 +90,10 @@ def generate_bag_name(directory_name, multipart_num=None, total_num=None):
         if int(multipart_num) > int(total_num):
             raise Exception
 
-        if len(str(multipart_num)) != len(str(total_num)):
-            multipart_num = multipart_num.zfill(len(str(total_num)))
+        if len(str(multipart_num)) > 3 or len(str(total_num)) > 3:
+            raise Exception # can't have more than 999 bags as part of multipart bag (according to APTrust docs)
+        multipart_num = str(multipart_num).zfill(3)
+        total_num = str(total_num).zfill(3)
 
         bag_name = "{0}.b{1}.of{2}".format(bag_name, multipart_num, total_num)
 
@@ -192,6 +195,97 @@ def create_asset(bag_file_name, value, original_bag_dir):
     else:
         return False
 
+def copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir=''):
+    logging.debug('Copying directory to bag staging area')
+    apt_bag_base_path = os.path.join(config['bags_base_dir'], apt_bag_name)
+    new_path = ''
+    if is_single_bag(bag_dir):
+        # bag the entire directory
+        # create new path for bag in staging area
+        new_path = os.path.join(config['bags_base_dir'], apt_bag_name)
+        # copy directory to be bagged to staging area
+        shutil.copytree(bag_dir, new_path)
+    else:
+        # its a list of files
+        print apt_bag_name
+        print bag_dir
+        for f in bag_dir:
+            # construct the new path in the bag staging area
+            new_path = f.replace(original_dir, '')
+            new_path = "/".join(new_path.split('/')[0:-1])
+            new_path = os.path.join(apt_bag_base_path, new_path)
+
+            # create the same subdirectory structure as original directory
+            if not os.path.exists(new_path):
+                os.makedirs(new_path)
+
+            # copy the original file to the staging area
+            shutil.copy2(f, new_path)
+
+    return apt_bag_base_path
+
+def is_single_bag(bag_dir):
+    return type(bag_dir) is str
+
+def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total_num=''):
+    apt_bag_name = generate_bag_name(bag_name, bag_num, bag_total_num)
+    apt_bag_path = copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir)
+
+    # create base bag
+    logging.debug('Making bag')
+    if bag_num and bag_total_num:
+        bag_params = {'Bag-Count': '{0} of {1}'.format(bag_num, bag_total_num)}
+        the_bag = bagit.make_bag(apt_bag_path, bag_params)
+    else:
+        the_bag = bagit.make_bag(apt_bag_path)
+    # add the aptrust required info TODO: convert to use APTrustBag class that extends the bagit.Bag class
+    generate_aptrust_info(the_bag.path, bag_name, access)
+    # tar the newly created bag
+    logging.debug('Tarring bag')
+    tarred_apt_bag = tar_bag(apt_bag_path)
+
+    # return a reference to the bag itself, and the path of the tarred bag
+    return the_bag, tarred_apt_bag
+
+def create_multipart_bags(bag_name, files, original_bag_dir, access):
+    total_size = 0
+    files_to_bag = []
+    bags_to_process = []
+    for f, file_size in files.iteritems():
+        # if adding this file would exceed the threshold
+        if file_size + total_size > config['multi_threshold']:
+            # create bag from current to_bag files
+            bags_to_process.append(files_to_bag)
+            # reset to_bag files and total_size to the current file
+            files_to_bag = [f]
+            total_size = file_size
+        else:
+            files_to_bag.append(f)
+            total_size += file_size
+
+    # if there are remaining items, bag them
+    if files_to_bag:
+        bags_to_process.append(files_to_bag)
+
+    # we need to know how many bags total there are before we process them
+    created_bags = []
+    for idx, bag in enumerate(bags_to_process):
+        created_bags.append(create_bag(bag_name, bag, access, original_bag_dir, idx+1, len(bags_to_process)))
+
+    return created_bags
+
+def get_files_in_directory(directory):
+    file_sizes = {}
+    total_size = 0
+    for dirpath, dirnames, filenames in os.walk(directory):
+      for filename in filenames:
+        fpath = os.path.join(dirpath, filename)
+        size = os.path.getsize(fpath)
+        file_sizes[fpath] = size
+        total_size += size
+
+    return file_sizes
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
@@ -226,32 +320,37 @@ if __name__ == '__main__':
 
     # kick off bagging/ingest
     try:
-        bag_dir_name = generate_bag_name(bag_name)
-        new_path = os.path.join(config['bags_base_dir'], bag_dir_name)
-        logging.debug('Copying directory to bag staging area')
-        shutil.copytree(bag_dir, new_path)
-        logging.debug('Making bag')
-        the_bag = bagit.make_bag(new_path)
-        generate_aptrust_info(the_bag.path, bag_name, access)
-        logging.debug('Tarring bag')
-        tarred_bag = tar_bag(new_path)
-        logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
+        # check size of directory
+        files = get_files_in_directory(bag_dir)
+        print files
+        dir_size = reduce(lambda x,y: x + y, files.itervalues())
 
-        tar_base_name = os.path.split(tarred_bag)[1]
-        push_to_aptrust(tarred_bag, tar_base_name, env, args.verbose)
+        if dir_size > config['multi_threshold'] and len(files) > 1:
+            created_bags = create_multipart_bags(bag_name, files, bag_dir, access)
+        elif dir_size > config['multi_threshold'] and len(files) <= 1:
+            raise Exception # too big
+        else:
+            #create single bag as normal
+            created_bags = [create_bag(bag_name, bag_dir, access)]
 
-        if verify_s3_upload(tar_base_name, env):
-            upload_time = datetime.datetime.now().isoformat()
-            assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in the_bag.entries.iteritems()])
-            # upload to daev
-            daev_client = DaevClient(config[env]['daev_base_path'])
-            daev_client.create_submission_package('apt', upload_time, assets)
+        for bag in created_bags:
+            print bag
+            logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
+            #aptrust_bag_name = push_to_aptrust(bag[0], env, args.verbose)
 
-            logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
+            if True:
+            #FIXME if verify_s3_upload(aptrust_bag_name, env):
+                upload_time = datetime.datetime.now().isoformat()
+                assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in bag[0].entries.iteritems()])
+                # upload to daev
+                daev_client = DaevClient(config[env]['daev_base_path'])
+                daev_client.create_submission_package('apt', upload_time, assets)
 
-            # write to audit file (tab delimited)
-            with open(config['audit_file'], 'a') as audit:
-              audit.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(upload_time, bag_name, tarred_bag, bag_dir, access, env))
+                logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
+
+                # write to audit file (tab delimited)
+                with open(config['audit_file'], 'a') as audit:
+                  audit.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(upload_time, bag_name, bag[1], bag_dir, access, env))
 
     except Exception as e:
         logging.exception("There was an error:")
