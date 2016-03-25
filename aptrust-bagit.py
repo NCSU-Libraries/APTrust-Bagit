@@ -23,97 +23,15 @@ stream = file(CONFIG_FILE, 'r')
 config = yaml.load(stream)
 stream.close()
 
-
 logging.basicConfig(filename=config['log_file'], level=logging.INFO , format='%(asctime)s - %(levelname)s:  %(message)s')
 
-""" Generate an aptrust-info.txt file required by APTrust """
-def generate_aptrust_info(bag_path, title, access='consortia'):
-    if access not in accepted_access_levels:
-        raise Exception
 
-    if not title:
-        raise Exception
+"""
+class DaevClient
 
-    with open(os.path.join(bag_path, 'aptrust-info.txt'), 'w') as aptrust_info:
-        aptrust_info.write("Title: {0}\nAccess: {1}".format(title, access.capitalize()))
-
-    return True
-
-
-""" Push a bag to APTrust S3 bucket """
-def push_to_aptrust(tarred_bag, env='test', verbose=False):
-    tar_base_name = os.path.split(tarred_bag)[1]
-    s3 = boto3.resource('s3')
-
-    if verbose:
-        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name, Callback=ProgressPercentage(tarred_bag))
-    else:
-        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name)
-
-    return tar_base_name
-
-
-class ProgressPercentage(object):
-    def __init__(self, filename):
-        self._filename = filename
-        self._size = float(os.path.getsize(filename))
-        self._seen_so_far = 0
-        self._lock = threading.Lock()
-
-    def __call__(self, bytes_amount):
-        with self._lock:
-            self._seen_so_far += bytes_amount
-            percentage = (self._seen_so_far / self._size) * 100
-            print "%s %s / %s (%.2f%%)" % (self._filename, self._seen_so_far, self._size, percentage)
-
-
-""" Tar a bag according to APTrust specs (no compression) """
-def tar_bag(bag_path, tar_path=None):
-    if not tar_path:
-        tar_path = os.path.normpath(bag_path) + '.tar'
-    bag_dir = bag_path.rstrip('/').split('/')[-1]
-    return_val = os.system('tar cf {0} --directory={1} {2}'.format(tar_path, config['bags_base_dir'], bag_dir))
-    return bag_path + '.tar' if return_val == 0 else False
-
-
-""" Generate bag name """
-def generate_bag_name(directory_name, multipart_num=None, total_num=None):
-    # convert dir name . to _
-    converted_dirname = directory_name.lower().replace('.', '_')
-    logging.debug('Converted directory name: %s' % converted_dirname)
-
-    # prefix w/ institution id
-    bag_name = "{0}.{1}".format(config['institution'], converted_dirname)
-
-    # suffix w/ bag count if necessary
-    if multipart_num and total_num:
-        if int(multipart_num) > int(total_num):
-            raise Exception
-
-        if len(str(multipart_num)) > 3 or len(str(total_num)) > 3:
-            raise Exception # can't have more than 999 bags as part of multipart bag (according to APTrust docs)
-        multipart_num = str(multipart_num).zfill(3)
-        total_num = str(total_num).zfill(3)
-
-        bag_name = "{0}.b{1}.of{2}".format(bag_name, multipart_num, total_num)
-
-    return bag_name
-
-""" Check S3 to see if the bag exists in the receiving bucket """
-def verify_s3_upload(bag_name, env):
-    s3 = boto3.resource('s3')
-
-    # check a few times to make sure the data has time to appear in S3
-    for _ in range(5):
-        bucket = s3.Bucket(config[env]['receiving_bucket'])
-        if any(obj.key == bag_name for obj in bucket.objects.all()):
-            return True
-        else:
-            time.sleep(2)
-            continue
-
-    raise Exception #not uploaded
-
+A class representing a client to DAEV-management, a system for tracking asset/package/filesystem level information
+for preservation. Currently only implements creating/sending a new SubmissionPackage to an instance of DAEV-management.
+"""
 
 class DaevClient(object):
     def __init__(self, base_url):
@@ -177,7 +95,102 @@ class DaevClient(object):
             }
         }
 
+"""
+class ProgressPercentage
+A class that represents a progress meter for S3 submissions
+"""
 
+class ProgressPercentage(object):
+    def __init__(self, filename):
+        self._filename = filename
+        self._size = float(os.path.getsize(filename))
+        self._seen_so_far = 0
+        self._lock = threading.Lock()
+
+    def __call__(self, bytes_amount):
+        with self._lock:
+            self._seen_so_far += bytes_amount
+            percentage = (self._seen_so_far / self._size) * 100
+            print "%s %s / %s (%.2f%%)" % (self._filename, self._seen_so_far, self._size, percentage)
+
+
+""" Generate an aptrust-info.txt file required by APTrust """
+def generate_aptrust_info(bag_path, title, access='consortia'):
+    if access not in accepted_access_levels:
+        raise Exception
+
+    if not title:
+        raise Exception
+
+    with open(os.path.join(bag_path, 'aptrust-info.txt'), 'w') as aptrust_info:
+        aptrust_info.write("Title: {0}\nAccess: {1}".format(title, access.capitalize()))
+
+    return True
+
+
+""" Push a bag to APTrust S3 bucket """
+def push_to_aptrust(tarred_bag, env='test', verbose=False):
+    tar_base_name = os.path.split(tarred_bag)[1]
+    s3 = boto3.resource('s3')
+
+    if verbose:
+        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name, Callback=ProgressPercentage(tarred_bag))
+    else:
+        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name)
+
+    return tar_base_name
+
+
+""" Tar a bag according to APTrust specs (no compression) """
+def tar_bag(bag_path, tar_path=None):
+    if not tar_path:
+        tar_path = os.path.normpath(bag_path) + '.tar'
+    bag_dir = bag_path.rstrip('/').split('/')[-1]
+    return_val = os.system('tar cf {0} --directory={1} {2}'.format(tar_path, config['bags_base_dir'], bag_dir))
+    return bag_path + '.tar' if return_val == 0 else False
+
+
+""" Generate bag name """
+def generate_bag_name(directory_name, multipart_num=None, total_num=None):
+    # convert dir name . to _
+    converted_dirname = directory_name.lower().replace('.', '_')
+    logging.debug('Converted directory name: %s' % converted_dirname)
+
+    # prefix w/ institution id
+    bag_name = "{0}.{1}".format(config['institution'], converted_dirname)
+
+    # suffix w/ bag count if necessary
+    if multipart_num and total_num:
+        if int(multipart_num) > int(total_num):
+            raise Exception
+
+        if len(str(multipart_num)) > 3 or len(str(total_num)) > 3:
+            raise Exception # can't have more than 999 bags as part of multipart bag (according to APTrust docs)
+        multipart_num = str(multipart_num).zfill(3)
+        total_num = str(total_num).zfill(3)
+
+        bag_name = "{0}.b{1}.of{2}".format(bag_name, multipart_num, total_num)
+
+    return bag_name
+
+
+""" Check S3 to see if the bag exists in the receiving bucket """
+def verify_s3_upload(bag_name, env):
+    s3 = boto3.resource('s3')
+
+    # check a few times to make sure the data has time to appear in S3
+    for _ in range(5):
+        bucket = s3.Bucket(config[env]['receiving_bucket'])
+        if any(obj.key == bag_name for obj in bucket.objects.all()):
+            return True
+        else:
+            time.sleep(2)
+            continue
+
+    raise Exception #not uploaded
+
+
+""" Create an asset dict from a filename for submission to DAEV """
 def create_asset(bag_file_name, value, original_bag_dir):
     if bag_file_name.startswith('data/'):
         asset = {}
@@ -195,6 +208,11 @@ def create_asset(bag_file_name, value, original_bag_dir):
     else:
         return False
 
+
+""" Handles copying files to the bag staging area for bag creation.
+    The 'bag_dir' arg can be a directory name string, or a list of
+    filename strings.
+"""
 def copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir=''):
     logging.debug('Copying directory to bag staging area')
     apt_bag_base_path = os.path.join(config['bags_base_dir'], apt_bag_name)
@@ -222,9 +240,17 @@ def copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir=''):
 
     return apt_bag_base_path
 
+
+""" Convenience method for detecting whether we're processing a single or
+    multipart bag
+"""
 def is_single_bag(bag_dir):
     return type(bag_dir) is str
 
+
+""" Handles creating a bag, returns a tuple with the bag itself (of class Bag),
+    and the path to the bag tarfile
+"""
 def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total_num=''):
     apt_bag_name = generate_bag_name(bag_name, bag_num, bag_total_num)
     apt_bag_path = copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir)
@@ -245,6 +271,12 @@ def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total
     # return a reference to the bag itself, and the path of the tarred bag
     return the_bag, tarred_apt_bag
 
+
+""" Handles mapping out a multipart bag - we need to know the structure of each
+    bag before actually creating the bags, so we can number them.
+    This is a fairly simple implementation, and might not result in the smallest
+    possible number of bags, but it works.
+"""
 def create_multipart_bags(bag_name, files, original_bag_dir, access):
     total_size = 0
     files_to_bag = []
@@ -272,6 +304,9 @@ def create_multipart_bags(bag_name, files, original_bag_dir, access):
 
     return created_bags
 
+""" Given a directory, return a dict where keys are the filenames within that directory
+    (and all subdirectories), and values are the corresponding sizes of those files.
+"""
 def get_files_in_directory(directory):
     file_sizes = {}
     total_size = 0
@@ -284,6 +319,8 @@ def get_files_in_directory(directory):
 
     return file_sizes
 
+
+""" Create the command line argument parser for this script and return it. """
 def create_arg_parser():
     parser = argparse.ArgumentParser(
         description='Bag a directory and send it to an APTrust S3 receiving bucket')
@@ -297,12 +334,10 @@ def create_arg_parser():
     return parser
 
 
-if __name__ == '__main__':
-
-    parser = create_arg_parser()
-    args = parser.parse_args()
-
+""" Validate arguments received from command-line, and return them """
+def evaluate_args(args):
     access = args.access or 'institution'
+
     if access not in accepted_access_levels:
         logging.error('Invalid access level %s' % access)
         sys.exit(1)
@@ -320,6 +355,16 @@ if __name__ == '__main__':
         env = 'production'
     else:
         env = 'test'
+
+    return env, access, bag_dir, bag_name
+
+
+if __name__ == '__main__':
+
+    # Parse and validate command-line args
+    parser = create_arg_parser()
+    args = parser.parse_args()
+    env, access, bag_dir, bag_name = evaluate_args(args)
 
     # kick off bagging/ingest
     try:
