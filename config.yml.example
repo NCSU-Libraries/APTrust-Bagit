@@ -6,6 +6,8 @@ log_file: '/path/to/error.log'
 # Institution code
 institution: 'somewhere'
 
+# Max bag size (in bytes)
+
 # Test APTrust/S3 server credentials
 test:
   receiving_bucket: 'aptrust.receiving.test.somewhere.edu'

@@ -207,12 +207,10 @@ def copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir=''):
         shutil.copytree(bag_dir, new_path)
     else:
         # its a list of files
-        print apt_bag_name
-        print bag_dir
         for f in bag_dir:
             # construct the new path in the bag staging area
-            new_path = f.replace(original_dir, '')
-            new_path = "/".join(new_path.split('/')[0:-1])
+            new_path = f.replace(original_dir, '')[1:]
+            new_path = os.path.dirname(new_path)
             new_path = os.path.join(apt_bag_base_path, new_path)
 
             # create the same subdirectory structure as original directory
@@ -286,8 +284,7 @@ def get_files_in_directory(directory):
 
     return file_sizes
 
-if __name__ == '__main__':
-
+def create_arg_parser():
     parser = argparse.ArgumentParser(
         description='Bag a directory and send it to an APTrust S3 receiving bucket')
 
@@ -297,6 +294,12 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--production', help='Ingest to production instance', action='store_true')
     parser.add_argument('-v', '--verbose', help='Provide more output', action='store_true')
 
+    return parser
+
+
+if __name__ == '__main__':
+
+    parser = create_arg_parser()
     args = parser.parse_args()
 
     access = args.access or 'institution'
@@ -322,7 +325,6 @@ if __name__ == '__main__':
     try:
         # check size of directory
         files = get_files_in_directory(bag_dir)
-        print files
         dir_size = reduce(lambda x,y: x + y, files.itervalues())
 
         if dir_size > config['multi_threshold'] and len(files) > 1:
@@ -334,12 +336,10 @@ if __name__ == '__main__':
             created_bags = [create_bag(bag_name, bag_dir, access)]
 
         for bag in created_bags:
-            print bag
             logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
-            #aptrust_bag_name = push_to_aptrust(bag[0], env, args.verbose)
+            aptrust_bag_name = push_to_aptrust(bag[1], env, args.verbose)
 
-            if True:
-            #FIXME if verify_s3_upload(aptrust_bag_name, env):
+            if verify_s3_upload(aptrust_bag_name, env):
                 upload_time = datetime.datetime.now().isoformat()
                 assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in bag[0].entries.iteritems()])
                 # upload to daev
