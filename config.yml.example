@@ -1,17 +1,22 @@
 # Bags staging area - this is where bags will be created for the purpose of ingesting
 bags_base_dir: '/path/to/bags'
+# Location of an audit file (bag info will be recorded in this file after ingest)
 audit_file: '/path/to/audit.txt'
+# Location of log file
 log_file: '/path/to/error.log'
 
 # Institution code
 institution: 'somewhere'
 
 # Max bag size (in bytes)
+multi_threshold: 1234567890
 
 # Test APTrust/S3 server credentials
 test:
   receiving_bucket: 'aptrust.receiving.test.somewhere.edu'
+  daev_base_path: 'http://url_to_daev'
 
 # Production APTrust/S3 server credentials
 production:
   receiving_bucket: 'aptrust.receiving.somewhere.edu'
+  daev_base_path: 'http://url_to_daev'

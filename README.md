@@ -4,7 +4,8 @@
 
 A set of scripts to bag things according to the bagit specification,
 along with creation of metadata files that APTrust require. Ingests to
-APTrust S3 buckets, verifies S3 upload.
+APTrust S3 buckets, verifies S3 upload, records audit data to text file
+and to DAEV (digital asset management system).
 
 ## Setup
 

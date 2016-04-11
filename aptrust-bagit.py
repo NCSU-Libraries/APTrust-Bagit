@@ -4,6 +4,7 @@ import bagit
 import os
 import shutil
 import sys
+import socket
 import yaml
 import boto3
 import requests
@@ -197,7 +198,7 @@ def create_asset(bag_file_name, value, original_bag_dir):
         bag_file_path = bag_file_name[5:] # cut off the data/ part
         original_file_path = os.path.join(original_bag_dir, bag_file_path)
         asset['filename'] = bag_file_name.split('/')[-1]
-        asset['location'] = 'scrc-staff-prod01.lib.ncsu.edu:%s' % original_file_path #TODO: make more generic
+        asset['location'] = '%s:%s' % (socket.gethostname(), original_file_path)
         # get the create date
         asset['file_creation_datetime'] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(os.path.getctime(original_file_path)))
         # get size of file
@@ -300,7 +301,8 @@ def create_multipart_bags(bag_name, files, original_bag_dir, access):
     # we need to know how many bags total there are before we process them
     created_bags = []
     for idx, bag in enumerate(bags_to_process):
-        created_bags.append(create_bag(bag_name, bag, access, original_bag_dir, idx+1, len(bags_to_process)))
+        new_bag = create_bag(bag_name, bag, access, original_bag_dir, idx+1, len(bags_to_process))
+        created_bags.append(new_bag)
 
     return created_bags
 
@@ -368,16 +370,17 @@ if __name__ == '__main__':
 
     # kick off bagging/ingest
     try:
-        # check size of directory
+        # get list of files, check size of directory
         files = get_files_in_directory(bag_dir)
         dir_size = reduce(lambda x,y: x + y, files.itervalues())
 
         if dir_size > config['multi_threshold'] and len(files) > 1:
+            # create multipart bags
             created_bags = create_multipart_bags(bag_name, files, bag_dir, access)
         elif dir_size > config['multi_threshold'] and len(files) <= 1:
             raise Exception # too big
         else:
-            #create single bag as normal
+            # create single bag
             created_bags = [create_bag(bag_name, bag_dir, access)]
 
         for bag in created_bags:
