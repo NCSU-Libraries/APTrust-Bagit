@@ -135,9 +135,9 @@ def push_to_aptrust(tarred_bag, env='test', verbose=False):
     s3 = boto3.resource('s3')
 
     if verbose:
-        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name, Callback=ProgressPercentage(tarred_bag))
+        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], tar_base_name, Callback=ProgressPercentage(tarred_bag))
     else:
-        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], bag_name)
+        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], tar_base_name)
 
     return tar_base_name
 
@@ -264,7 +264,7 @@ def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total
     else:
         the_bag = bagit.make_bag(apt_bag_path)
     # add the aptrust required info TODO: convert to use APTrustBag class that extends the bagit.Bag class
-    generate_aptrust_info(the_bag.path, bag_name, access)
+    generate_aptrust_info(the_bag.path, apt_bag_name, access)
     # tar the newly created bag
     logging.debug('Tarring bag')
     tarred_apt_bag = tar_bag(apt_bag_path)
@@ -391,8 +391,8 @@ if __name__ == '__main__':
                 upload_time = datetime.datetime.now().isoformat()
                 assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in bag[0].entries.iteritems()])
                 # upload to daev
-                daev_client = DaevClient(config[env]['daev_base_path'])
-                daev_client.create_submission_package('apt', upload_time, assets)
+                #daev_client = DaevClient(config[env]['daev_base_path'])
+                #daev_client.create_submission_package('apt', upload_time, assets)
 
                 logging.info('Successfully uploaded bag to S3 - %s - from location - %s' % (bag_name, bag_dir))
 
