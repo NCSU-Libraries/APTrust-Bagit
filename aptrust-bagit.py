@@ -133,11 +133,12 @@ def generate_aptrust_info(bag_path, title, access='consortia'):
 def push_to_aptrust(tarred_bag, env='test', verbose=False):
     tar_base_name = os.path.split(tarred_bag)[1]
     s3 = boto3.resource('s3')
+    s3_config = boto3.s3.transfer.TransferConfig(multipart_chunksize=config['multipart_chunksize'])
 
     if verbose:
-        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], tar_base_name, Callback=ProgressPercentage(tarred_bag))
+        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], tar_base_name, Callback=ProgressPercentage(tarred_bag), Config=s3_config)
     else:
-        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], tar_base_name)
+        s3.meta.client.upload_file(tarred_bag, config[env]['receiving_bucket'], tar_base_name, Config=s3_config)
 
     return tar_base_name
 
