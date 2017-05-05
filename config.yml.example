@@ -11,6 +11,9 @@ institution: 'somewhere'
 # Max bag size (in bytes)
 multi_threshold: 1234567890
 
+# Chunk size of each multipart upload to S3 (in bytes)
+multipart_chunksize: 8388608
+
 # Test APTrust/S3 server credentials
 test:
   receiving_bucket: 'aptrust.receiving.test.somewhere.edu'
