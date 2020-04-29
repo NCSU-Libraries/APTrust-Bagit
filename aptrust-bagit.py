@@ -24,7 +24,7 @@ CONFIG_FILE = 'config.yml'
 
 # Load config
 stream = open(CONFIG_FILE, 'r')
-config = yaml.load(stream)
+config = yaml.load(stream, Loader=yaml.FullLoader)
 stream.close()
 
 logging.basicConfig(filename=config['log_file'], level=logging.INFO , format='%(asctime)s - %(levelname)s:  %(message)s')
