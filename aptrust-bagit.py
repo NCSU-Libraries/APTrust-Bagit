@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+from __future__ import print_function
 import bagit
 import os
 import shutil
@@ -14,13 +15,15 @@ import argparse
 import datetime
 import time
 import json
+from functools import reduce
 
 accepted_access_levels = ['consortia', 'restricted', 'institution']
+accepted_storage_levels = ['Standard', 'Glacier-OH', 'Glacier-OR', 'Glacier-VA', 'Glacier-Deep-OH','Glacier-Deep-OR', 'Glacier-Deep-VA']
 CONFIG_FILE = 'config.yml'
 
 
 # Load config
-stream = file(CONFIG_FILE, 'r')
+stream = open(CONFIG_FILE, 'r')
 config = yaml.load(stream)
 stream.close()
 
@@ -112,19 +115,22 @@ class ProgressPercentage(object):
         with self._lock:
             self._seen_so_far += bytes_amount
             percentage = (self._seen_so_far / self._size) * 100
-            print "%s %s / %s (%.2f%%)" % (self._filename, self._seen_so_far, self._size, percentage)
+            print("%s %s / %s (%.2f%%)" % (self._filename, self._seen_so_far, self._size, percentage))
 
 
 """ Generate an aptrust-info.txt file required by APTrust """
-def generate_aptrust_info(bag_path, title, access='consortia'):
+def generate_aptrust_info(bag_path, title, access='consortia', storage='Standard'):
     if access not in accepted_access_levels:
+        raise Exception
+
+    if storage not in accepted_storage_levels:
         raise Exception
 
     if not title:
         raise Exception
 
     with open(os.path.join(bag_path, 'aptrust-info.txt'), 'w') as aptrust_info:
-        aptrust_info.write("Title: {0}\nAccess: {1}".format(title, access.capitalize()))
+        aptrust_info.write("Title: {0}\nAccess: {1}\nStorage-Option: {2}".format(title, access.capitalize(), storage))
 
     return True
 
@@ -253,7 +259,7 @@ def is_single_bag(bag_dir):
 """ Handles creating a bag, returns a tuple with the bag itself (of class Bag),
     and the path to the bag tarfile
 """
-def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total_num=''):
+def create_bag(bag_name, bag_dir, access, storage, original_dir='', bag_num='', bag_total_num=''):
     apt_bag_name = generate_bag_name(bag_name, bag_num, bag_total_num)
     apt_bag_path = copy_files_to_staging_area(bag_dir, apt_bag_name, original_dir)
 
@@ -265,7 +271,7 @@ def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total
     else:
         the_bag = bagit.make_bag(apt_bag_path)
     # add the aptrust required info TODO: convert to use APTrustBag class that extends the bagit.Bag class
-    generate_aptrust_info(the_bag.path, apt_bag_name, access)
+    generate_aptrust_info(the_bag.path, apt_bag_name, access, storage)
     # tar the newly created bag
     logging.debug('Tarring bag')
     tarred_apt_bag = tar_bag(apt_bag_path)
@@ -279,11 +285,11 @@ def create_bag(bag_name, bag_dir, access, original_dir='', bag_num='', bag_total
     This is a fairly simple implementation, and might not result in the smallest
     possible number of bags, but it works.
 """
-def create_multipart_bags(bag_name, files, original_bag_dir, access):
+def create_multipart_bags(bag_name, files, original_bag_dir, access, storage):
     total_size = 0
     files_to_bag = []
     bags_to_process = []
-    for f, file_size in files.iteritems():
+    for f, file_size in files.items():
         # if adding this file would exceed the threshold
         if file_size + total_size > config['multi_threshold']:
             # create bag from current to_bag files
@@ -302,7 +308,7 @@ def create_multipart_bags(bag_name, files, original_bag_dir, access):
     # we need to know how many bags total there are before we process them
     created_bags = []
     for idx, bag in enumerate(bags_to_process):
-        new_bag = create_bag(bag_name, bag, access, original_bag_dir, idx+1, len(bags_to_process))
+        new_bag = create_bag(bag_name, bag, access, storage, original_bag_dir, idx+1, len(bags_to_process))
         created_bags.append(new_bag)
 
     return created_bags
@@ -331,6 +337,7 @@ def create_arg_parser():
     parser.add_argument('directory', help='The directory to bag/ingest')
     parser.add_argument('-b', '--bag', help='Name to give the bag (default is the directory name)')
     parser.add_argument('-a', '--access', help='APTrust access level for bag (can be either: consortia, institution, or restricted - default is institution)')
+    parser.add_argument('-s', '--storage', help='APTrust storage level for bag (can be either: Standard, Glacier-OH, Glacier-OR, Glacier-VA, Glacier-Deep-OH, Glacier-Deep-OR, Glacier-Deep-VA - default is Standard)')
     parser.add_argument('-p', '--production', help='Ingest to production instance', action='store_true')
     parser.add_argument('-v', '--verbose', help='Provide more output', action='store_true')
 
@@ -340,9 +347,14 @@ def create_arg_parser():
 """ Validate arguments received from command-line, and return them """
 def evaluate_args(args):
     access = args.access or 'institution'
+    storage = args.storage or 'Standard'
 
     if access not in accepted_access_levels:
         logging.error('Invalid access level %s' % access)
+        sys.exit(1)
+
+    if storage not in accepted_storage_levels:
+        logging.error('Invalid storage level %s' % storage)
         sys.exit(1)
 
     # validate directory
@@ -359,7 +371,7 @@ def evaluate_args(args):
     else:
         env = 'test'
 
-    return env, access, bag_dir, bag_name
+    return env, access, bag_dir, bag_name, storage
 
 
 if __name__ == '__main__':
@@ -367,22 +379,22 @@ if __name__ == '__main__':
     # Parse and validate command-line args
     parser = create_arg_parser()
     args = parser.parse_args()
-    env, access, bag_dir, bag_name = evaluate_args(args)
+    env, access, bag_dir, bag_name, storage = evaluate_args(args)
 
     # kick off bagging/ingest
     try:
         # get list of files, check size of directory
         files = get_files_in_directory(bag_dir)
-        dir_size = reduce(lambda x,y: x + y, files.itervalues())
+        dir_size = reduce(lambda x,y: x + y, files.values())
 
         if dir_size > config['multi_threshold'] and len(files) > 1:
             # create multipart bags
-            created_bags = create_multipart_bags(bag_name, files, bag_dir, access)
+            created_bags = create_multipart_bags(bag_name, files, bag_dir, access, storage)
         elif dir_size > config['multi_threshold'] and len(files) <= 1:
             raise Exception # too big
         else:
             # create single bag
-            created_bags = [create_bag(bag_name, bag_dir, access)]
+            created_bags = [create_bag(bag_name, bag_dir, access, storage)]
 
         for bag in created_bags:
             logging.debug('Pushing to APTrust S3 instance (%s)' % (env))
@@ -390,7 +402,7 @@ if __name__ == '__main__':
 
             if verify_s3_upload(aptrust_bag_name, env):
                 upload_time = datetime.datetime.now().isoformat()
-                assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in bag[0].entries.iteritems()])
+                assets = filter(bool, [create_asset(name, value, bag_dir) for name, value in bag[0].entries.items()])
                 # upload to daev
                 #daev_client = DaevClient(config[env]['daev_base_path'])
                 #daev_client.create_submission_package('apt', upload_time, assets)

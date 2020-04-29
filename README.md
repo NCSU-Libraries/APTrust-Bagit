@@ -21,7 +21,7 @@ Copy config.yml.example to config.yml, and fill in with your own values
 The Python S3 client (boto3) also expects that a file with the bucket keys reside in ~/.aws/credentials in the form:
 
     [default]
-    aws_access_key_id = access_key_here 
+    aws_access_key_id = access_key_here
     aws_secret_access_key = secret_access_key_here
 
 ### Installation
@@ -55,6 +55,10 @@ Here is information about the various arguments you can provide to the script:
 				APTrust access level for bag (can be either:
 				consortia, institution, or restricted - default is
 				institution)
+    -s STORAGE, --storage STORAGE
+        APTrust storage location for bag (can be either:
+        Standard, Glacier-OH, Glacier-OR, Glacier-VA, Glacier-Deep-OH, Glacier-Deep-OR, Glacier-Deep-VA -
+        default is Standard)
 	  -p, --production      Ingest to production instance
 	  -v, --verbose         Provide more output
 
@@ -68,7 +72,7 @@ See send_dir_to_aptrust.py for an example of how to do this, or run that script 
 
 For each bag, as part of the bagging process, the following information is kept:
   - Checksums for each file in the bag (manifest-md5.txt, tagmanifest-md5.txt)
-  - Bag name, access level (aptrust-info.txt)
+  - Bag name, access level, storage location (aptrust-info.txt)
   - Bagging date, payload oxum, bagging agent (bag-info.txt)
   - Bagit version information (bagit.txt)
 
@@ -78,6 +82,7 @@ In addition to this, the following information is recorded for successfully tran
   - Location/Name of tar file
   - Original directory that was bagged
   - Access level
+  - Storage Location
   - Whether it was submitted to test vs. production
 
 Errors in transmission or bagging are also recorded in logs/error.log
